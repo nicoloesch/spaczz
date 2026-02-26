@@ -2,8 +2,9 @@
 import typing as ty
 import warnings
 
-from spacy.tokens import Doc
+from spacy.tokens import Doc, Span
 from spacy.vocab import Vocab
+from spacy.util import filter_spans
 
 from .._search import RegexSearcher
 from ..customtypes import MatchResult
@@ -11,6 +12,7 @@ from ..customtypes import SpaczzType
 from ..exceptions import KwargsWarning
 from ..util import nest_defaultdict
 
+REGEX_SPAN_KEY = "regex_matches"
 
 class RegexMatcher:
     """spaCy-like matcher for finding regex phrase matches in `Doc` objects.
@@ -91,7 +93,48 @@ class RegexMatcher:
         ] = nest_defaultdict(list)
         self._searcher = RegexSearcher(vocab=vocab)
 
-    def __call__(self: "RegexMatcher", doc: Doc) -> ty.List[MatchResult]:
+    def __call__(self: "RegexMatcher", doc: Doc) -> Doc:
+        return self._add_matches_span(doc)
+
+    def __contains__(self: "RegexMatcher", label: str) -> bool:
+        """Whether the matcher contains patterns for a label."""
+        return label in self._patterns
+
+    def __len__(self: "RegexMatcher") -> int:
+        """The number of labels added to the matcher."""
+        return len(self._patterns)
+
+    def __reduce__(
+        self: "RegexMatcher",
+    ) -> ty.Tuple[ty.Any, ty.Any]:  # Precisely typing this would be really long.
+        """Interface for pickling the matcher."""
+        data = (
+            self.__class__,
+            self.vocab,
+            self._patterns,
+            self._callbacks,
+            self.defaults,
+        )
+        return (unpickle_matcher, data)
+    
+    def _add_matches_span(self: "RegexMatcher", doc: Doc) -> Doc:
+        r"""Finds matches in `doc` given the matchers patterns and adds them as `Span` objects to the `Doc`'s `spans` under the key "regex_matches".
+
+        Args:
+            doc: The `Doc` object to match over.
+
+        Returns:
+            The `Doc` object with matched spans added to the `Doc.spans` under the key "regex_matches".
+        """
+        sorted_matches = self._get_matches_list(doc)
+        spans = []
+        for label, _start, _end, *_ in sorted_matches:
+            span = Span(doc, _start, _end, label=label)
+            spans.append(span)
+            doc.spans[REGEX_SPAN_KEY] = spans
+        return doc
+    
+    def _get_matches_list(self: "RegexMatcher", doc: Doc) -> ty.List[MatchResult]:
         r"""Finds matches in `doc` given the matchers patterns.
 
         Args:
@@ -134,27 +177,6 @@ class RegexMatcher:
             if on_match:
                 on_match(self, doc, i, sorted_matches)
         return sorted_matches
-
-    def __contains__(self: "RegexMatcher", label: str) -> bool:
-        """Whether the matcher contains patterns for a label."""
-        return label in self._patterns
-
-    def __len__(self: "RegexMatcher") -> int:
-        """The number of labels added to the matcher."""
-        return len(self._patterns)
-
-    def __reduce__(
-        self: "RegexMatcher",
-    ) -> ty.Tuple[ty.Any, ty.Any]:  # Precisely typing this would be really long.
-        """Interface for pickling the matcher."""
-        data = (
-            self.__class__,
-            self.vocab,
-            self._patterns,
-            self._callbacks,
-            self.defaults,
-        )
-        return (unpickle_matcher, data)
 
     @property
     def labels(self: "RegexMatcher") -> ty.Tuple[str, ...]:
