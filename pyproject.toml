@@ -68,8 +68,12 @@ automation = ["nox"]
 default-groups = "all"
 
 [build-system]
-requires = ["poetry>=1.0.0"]
-build-backend = "poetry.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Configure where the source code lives
+[tool.hatch.build.targets.wheel]
+packages = ["src/spaczz"]
 
 # Config
 
